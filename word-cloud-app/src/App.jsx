@@ -40,7 +40,7 @@ function App() {
 
   return (
     <div className="container">
-      <h1>Word Cloud Generator</h1>
+      <h1>Word Cloud Generator v2 - Auto-deployed</h1>
       <p className="subtitle">
         Paste text below and generate a word cloud visualization
       </p>
