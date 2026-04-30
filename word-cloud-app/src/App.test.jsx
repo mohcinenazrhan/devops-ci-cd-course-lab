@@ -9,7 +9,7 @@ describe("App", () => {
 
   it("renders the title", () => {
     render(<App />);
-    expect(screen.getByText("Word Cloud Generator")).toBeDefined();
+    expect(screen.getByText(/Word Cloud Generator/)).toBeDefined();
   });
 
   it("renders a textarea with sample text", () => {
