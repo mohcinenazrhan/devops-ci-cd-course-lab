@@ -257,17 +257,117 @@ code-reviewed, and travels with the application.
 
 - **Jenkins Dockerfile**: Added `nodejs npm` to apt packages
 - **test_fixture Dockerfile**: Added `nodejs npm` + `DEBIAN_FRONTEND=noninteractive` (fixes tzdata prompt)
-- **docker-compose.yml**: Added `./word-cloud-app:/var/word-cloud-app:ro` volume mount to Jenkins
 - **Ansible**: New playbook `node-app.yml` with role `word-cloud-app` (extracts tarball, runs with nohup node)
 
 ### Jenkins Jobs
 
 | Job | Type | Purpose |
 |-----|------|---------|
-| `word-cloud-app-build` | Pipeline | Lint → Test → Build → Package → Upload to Nexus |
+| `word-cloud-app-build` | Pipeline (from SCM) | Checkout → Install → Lint → Test → Build → Package → Upload → Deploy → Smoke Test |
 | `word-cloud-app-deploy` | Freestyle | Ansible deploys from Nexus to test_fixture |
 | `word-cloud-generator-build` | Freestyle | Original Go app build (still works) |
 | `word-cloud-generator-deploy` | Freestyle | Original Go app deploy |
+
+---
+
+## Milestone: GitHub-Triggered CI/CD (Real Production Flow)
+
+**Goal achieved:** `git push to main` → Jenkins polls → build → deploy → smoke test → app live, fully automatic.
+
+### Architecture Change
+
+| Before | After |
+|--------|-------|
+| Pipeline used inline Jenkinsfile in `config.xml` | Pipeline pulls Jenkinsfile from GitHub (`CpsScmFlowDefinition`) |
+| Source code came from `./word-cloud-app:/var/word-cloud-app:ro` volume mount | Source code comes from `git clone https://github.com/mohcinenazrhan/devops-ci-cd-course-lab.git` |
+| Manual click "Build" + "Deploy" + manually type version | Push to main → 1 min polling → build → auto-deploy → smoke test |
+| 7 pipeline stages | 9 stages (added Deploy + Smoke Test) |
+
+### Why SCM Polling Instead of Webhooks
+
+- **Security**: Webhooks (GitHub → Jenkins) require exposing Jenkins to the internet (ngrok/tunnels)
+- **Real-world parallel**: Most enterprise/financial Jenkins setups poll because they can't expose Jenkins externally
+- **Trade-off**: Up to 1 min delay vs. instant push notification, but 1-min is realistic for many real pipelines
+
+### Path Filter (Monorepo Pattern)
+
+The repo contains both app code AND infrastructure (Jenkins configs, Ansible, docs). The build job uses
+`PathRestriction` extension with `<includedRegions>word-cloud-app/.*</includedRegions>` so:
+- Editing `word-cloud-app/**` triggers a build
+- Editing `NOTES.md`, `docker-compose.yml`, infra configs does NOT trigger a build
+
+This is the typical monorepo CI pattern: many apps in one repo, each with its own pipeline filter.
+
+### Auto-Deploy Chain
+
+In the Jenkinsfile, after `Upload to Nexus`:
+
+```groovy
+stage('Deploy') {
+    steps {
+        build job: 'word-cloud-app-deploy',
+              parameters: [string(name: 'deploy_version', value: "1.${BUILD_NUMBER}")],
+              wait: true
+    }
+}
+```
+
+- `wait: true` means the build job waits for deploy to finish, and inherits its success/failure
+- If deploy fails, build is marked failed (correct cascade)
+- The version param uses `BUILD_NUMBER` so each build gets its own version (1.1, 1.2, 1.3, ...)
+
+### Lessons Learned (Real-World Bugs Found)
+
+These are real bugs that surfaced during the first end-to-end test runs. Reproducing them is part of the learning:
+
+#### 1. Tests block deploys (CI working as intended)
+- Build #4 changed the title from `"Word Cloud Generator"` to `"Word Cloud Generator v2 - Auto-deployed"`
+- The unit test asserted exact text: `screen.getByText("Word Cloud Generator")`
+- Test failed → build failed → deploy did NOT run → app stayed on old version
+- **Fix:** Use regex matcher `screen.getByText(/Word Cloud Generator/)` for forward-compatible tests
+- **Lesson:** Tests catch real regressions. Exact-match assertions are brittle.
+
+#### 2. False-positive smoke test
+- Original smoke test checked only `curl /api/health | grep '"status":"ok"'`
+- Build #5 deployed a new version, but the OLD process was still running on port 8888
+- Old process happily returned `{"status":"ok"}` → smoke test passed → build marked success
+- But the deployed code was NOT live (old PID still serving)
+- **Fix:** Smoke test now checks `/api/version` matches the expected `1.${BUILD_NUMBER}`
+- **Lesson:** "Health check" is meaningless if it doesn't verify the new version is actually serving. Always check identity, not just liveness.
+
+#### 3. Ansible kill matched its own SSH command
+- `pkill -f 'node server.js'` killed the SSH wrapper shell (which had that string in argv) instead of the actual node process
+- Result: `pkill` exited with `rc=-15` (killed itself), then `nohup node ...` failed with `EADDRINUSE`
+- **Fix:** Replaced with `fuser -k 8888/tcp` (kill by listening port) + wait for port to free
+- **Lesson:** Process pattern matching from a remote shell is fragile. Killing by port is reliable.
+
+### Build Number Hygiene
+
+Failed builds (`1.4`, `1.5`) and false-positive builds remain in Nexus forever. Real-world:
+- Don't trust version numbers without smoke test verification
+- Consider tagging only "verified" builds in artifact storage
+- Cleanup policies in Nexus help (we have `numToKeep>5</numToKeep>` on Jenkins side)
+
+### Files Touched in This Milestone
+
+- `word-cloud-app/Jenkinsfile` -- replaced volume copy with `checkout scm`, added Deploy + Smoke Test stages
+- `jenkins_home/jobs/word-cloud-app-build/config.xml` -- switched to `CpsScmFlowDefinition` + SCM block + 1-min polling + path filter
+- `jenkins_home/ansible/roles/word-cloud-app/tasks/main.yml` -- kill by port, install psmisc, wait for port free
+- `docker-compose.yml` -- removed `word-cloud-app` volume mount
+
+### Verification Pattern That Works
+
+To test the pipeline end-to-end:
+1. Edit something in `word-cloud-app/`
+2. `git commit && git push origin main`
+3. Within ~60s, watch http://localhost:8080/job/word-cloud-app-build/ -- new build appears
+4. Watch all 9 stages go green
+5. `curl http://localhost:8888/api/version` should show new build number
+
+To test the path filter:
+1. Edit `NOTES.md` only
+2. `git push`
+3. Wait 90s -- no build should trigger (`scm-polling.log` shows "No changes")
 
 ---
 

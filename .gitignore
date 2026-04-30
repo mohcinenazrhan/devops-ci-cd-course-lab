@@ -37,6 +37,8 @@ jenkins_home/jobs/*/builds/
 jenkins_home/jobs/*/lastStable
 jenkins_home/jobs/*/lastSuccessful
 jenkins_home/jobs/*/nextBuildNumber
+jenkins_home/jobs/*/scm-polling.log
+jenkins_home/jobs/*/jobs/
 
 # Keep only what matters in jenkins_home:
 # - jobs/*/config.xml (job definitions)
