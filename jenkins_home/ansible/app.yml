@@ -1,0 +1,10 @@
+---
+- name: Install word-cloud-generator app
+  hosts: all
+  remote_user: root
+  # remote_user: user
+  # become: yes
+  # become_method: sudo
+
+  roles:
+    - word-cloud-generator

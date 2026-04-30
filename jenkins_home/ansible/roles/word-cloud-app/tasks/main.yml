@@ -1,0 +1,31 @@
+---
+- name: Create app directory
+  file:
+    path: /opt/word-cloud-app
+    state: directory
+
+- name: Download word cloud app
+  get_url:
+    url: http://{{ lookup('env','nexus_pwd') }}@nexus:8081/repository/word-cloud-generator/cd_class/word-cloud-app/{{ lookup('env','deploy_version') }}/word-cloud-app-{{ lookup('env','deploy_version') }}.tar.gz
+    dest: /tmp/word-cloud-app.tar.gz
+    mode: '0644'
+    force_basic_auth: yes
+    force: yes
+
+- name: Extract the app
+  ansible.builtin.unarchive:
+    src: /tmp/word-cloud-app.tar.gz
+    dest: /opt/word-cloud-app/
+    remote_src: yes
+    extra_opts: ["--strip-components=1"]
+
+- name: Kill running word-cloud-app
+  ansible.builtin.shell: "pkill -f 'node server.js' || true"
+  ignore_errors: yes
+
+- name: Start word-cloud-app
+  ansible.builtin.shell:
+    cmd: "nohup node /opt/word-cloud-app/server.js > /var/log/word-cloud-app.log 2>&1 &"
+  environment:
+    APP_VERSION: "{{ lookup('env','deploy_version') }}"
+    PORT: "8888"

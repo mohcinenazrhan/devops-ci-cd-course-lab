@@ -1,0 +1,58 @@
+# Dependencies
+word-cloud-app/node_modules/
+word-cloud-app/dist/
+
+# Jenkins runtime data (large, regenerated)
+jenkins_home/plugins/
+jenkins_home/war/
+jenkins_home/logs/
+jenkins_home/caches/
+jenkins_home/workspace/
+jenkins_home/updates/
+jenkins_home/.cache/
+jenkins_home/.java/
+jenkins_home/.ansible/
+jenkins_home/.gitconfig
+jenkins_home/secret.*
+jenkins_home/secrets/
+jenkins_home/identity.key.enc
+jenkins_home/queue.xml*
+jenkins_home/*.log
+jenkins_home/*.xml
+jenkins_home/nodeMonitors.xml
+jenkins_home/org.jenkinsci.plugins.*
+jenkins_home/hudson.plugins.*
+jenkins_home/jenkins.telemetry.*
+jenkins_home/jenkins.model.*
+jenkins_home/jenkins.security.*
+jenkins_home/tools/
+jenkins_home/users/
+jenkins_home/fingerprints/
+jenkins_home/.owner
+jenkins_home/.config/
+jenkins_home/.npm/
+jenkins_home/.lastStarted
+jenkins_home/config-history/
+jenkins_home/jobs/*/builds/
+jenkins_home/jobs/*/lastStable
+jenkins_home/jobs/*/lastSuccessful
+jenkins_home/jobs/*/nextBuildNumber
+
+# Keep only what matters in jenkins_home:
+# - jobs/*/config.xml (job definitions)
+# - ansible/ (playbooks and roles)
+# - config.xml (global Jenkins config)
+# - .ssh/ (SSH config)
+
+# Nexus data (large, regenerated)
+nexus-data/
+nexus-data.bak/
+
+# Robot tests virtual env
+robot-tests/venv/
+
+# OS files
+.DS_Store
+
+# Claude local settings
+.claude/

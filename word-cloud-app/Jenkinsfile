@@ -1,0 +1,95 @@
+pipeline {
+    agent any
+
+    environment {
+        NEXUS_CREDS = credentials('708708f9-0960-415a-985e-b33cf9c792c3')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                sh 'rm -rf word-cloud-app'
+                sh 'cp -r /var/word-cloud-app word-cloud-app'
+            }
+        }
+
+        stage('Install') {
+            steps {
+                dir('word-cloud-app') {
+                    sh 'npm ci 2>&1 || npm install 2>&1'
+                }
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                dir('word-cloud-app') {
+                    sh 'npm run lint'
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                dir('word-cloud-app') {
+                    sh 'npm test'
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('word-cloud-app') {
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Package') {
+            steps {
+                dir('word-cloud-app') {
+                    sh '''
+                        mkdir -p /tmp/word-cloud-app-pkg
+                        cp -r dist server.js package.json package-lock.json /tmp/word-cloud-app-pkg/
+                        cd /tmp/word-cloud-app-pkg
+                        npm ci --omit=dev 2>&1 || npm install --omit=dev 2>&1
+                        cd /tmp
+                        tar czf ${WORKSPACE}/word-cloud-app.tar.gz word-cloud-app-pkg/
+                        rm -rf /tmp/word-cloud-app-pkg
+                    '''
+                }
+                sh 'ls -lh word-cloud-app.tar.gz'
+                sh 'md5sum word-cloud-app.tar.gz'
+            }
+        }
+
+        stage('Upload to Nexus') {
+            steps {
+                nexusArtifactUploader(
+                    nexusVersion: 'nexus3',
+                    protocol: 'http',
+                    nexusUrl: 'nexus:8081',
+                    groupId: 'cd_class',
+                    version: "1.${BUILD_NUMBER}",
+                    repository: 'word-cloud-generator',
+                    credentialsId: '708708f9-0960-415a-985e-b33cf9c792c3',
+                    artifacts: [[
+                        artifactId: 'word-cloud-app',
+                        type: 'tar.gz',
+                        classifier: '',
+                        file: 'word-cloud-app.tar.gz'
+                    ]]
+                )
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline SUCCESS - artifact version 1.${BUILD_NUMBER} uploaded to Nexus"
+        }
+        failure {
+            echo 'Pipeline FAILED - check the stage that failed above'
+        }
+    }
+}

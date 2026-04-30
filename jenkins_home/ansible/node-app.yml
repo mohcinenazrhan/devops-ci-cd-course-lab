@@ -1,0 +1,7 @@
+---
+- name: Deploy word-cloud-app (Node.js)
+  hosts: all
+  remote_user: root
+
+  roles:
+    - word-cloud-app

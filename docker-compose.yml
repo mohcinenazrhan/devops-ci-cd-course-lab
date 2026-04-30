@@ -1,0 +1,27 @@
+services:
+  jenkins:
+    build: ./cd_jenkins
+    image: cd_jenkins:latest
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    depends_on:
+      - nexus
+      - test_fixture
+    volumes:
+      - ./jenkins_home:/var/jenkins_home
+      - ./word-cloud-app:/var/word-cloud-app:ro
+    stop_grace_period: 120s
+  nexus:
+    image: sonatype/nexus3:latest
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./nexus-data:/nexus-data
+    stop_grace_period: 120s
+  test_fixture:
+    build: ./test_fixture
+    image: test_fixture:latest
+    ports:
+      - "8888:8888"
+      - "2222:22"
