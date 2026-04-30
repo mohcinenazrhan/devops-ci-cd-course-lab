@@ -19,8 +19,20 @@
     remote_src: yes
     extra_opts: ["--strip-components=1"]
 
-- name: Kill running word-cloud-app
-  ansible.builtin.shell: "pkill -f 'node server.js' || true"
+- name: Install psmisc (provides fuser)
+  ansible.builtin.package:
+    name: psmisc
+    state: present
+
+- name: Kill running word-cloud-app (by listening port)
+  ansible.builtin.shell: "fuser -k 8888/tcp || true"
+  ignore_errors: yes
+
+- name: Wait for port 8888 to be free
+  ansible.builtin.wait_for:
+    port: 8888
+    state: stopped
+    timeout: 10
   ignore_errors: yes
 
 - name: Start word-cloud-app

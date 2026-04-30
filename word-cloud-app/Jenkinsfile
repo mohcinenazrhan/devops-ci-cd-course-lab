@@ -93,16 +93,18 @@ pipeline {
         stage('Smoke Test') {
             steps {
                 sh '''
+                    EXPECTED_VERSION="1.${BUILD_NUMBER}"
                     for i in 1 2 3 4 5 6 7 8 9 10; do
-                        if curl -sf http://test_fixture:8888/api/health | grep -q '"status":"ok"'; then
-                            echo "Smoke test PASSED"
-                            curl -s http://test_fixture:8888/api/version
+                        RESPONSE=$(curl -sf http://test_fixture:8888/api/version || echo "")
+                        if echo "$RESPONSE" | grep -q "\\"version\\":\\"$EXPECTED_VERSION\\""; then
+                            echo "Smoke test PASSED - app serving version $EXPECTED_VERSION"
+                            curl -s http://test_fixture:8888/api/health
                             exit 0
                         fi
-                        echo "Waiting for app... (attempt $i)"
+                        echo "Attempt $i: got '$RESPONSE', expected version '$EXPECTED_VERSION'"
                         sleep 2
                     done
-                    echo "Smoke test FAILED - app not responding"
+                    echo "Smoke test FAILED - app not running expected version $EXPECTED_VERSION"
                     exit 1
                 '''
             }
