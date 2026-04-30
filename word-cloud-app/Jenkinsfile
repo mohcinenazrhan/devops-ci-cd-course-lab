@@ -8,8 +8,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                sh 'rm -rf word-cloud-app'
-                sh 'cp -r /var/word-cloud-app word-cloud-app'
+                checkout scm
             }
         }
 
@@ -80,6 +79,32 @@ pipeline {
                         file: 'word-cloud-app.tar.gz'
                     ]]
                 )
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                build job: 'word-cloud-app-deploy',
+                      parameters: [string(name: 'deploy_version', value: "1.${BUILD_NUMBER}")],
+                      wait: true
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                    for i in 1 2 3 4 5 6 7 8 9 10; do
+                        if curl -sf http://test_fixture:8888/api/health | grep -q '"status":"ok"'; then
+                            echo "Smoke test PASSED"
+                            curl -s http://test_fixture:8888/api/version
+                            exit 0
+                        fi
+                        echo "Waiting for app... (attempt $i)"
+                        sleep 2
+                    done
+                    echo "Smoke test FAILED - app not responding"
+                    exit 1
+                '''
             }
         }
     }

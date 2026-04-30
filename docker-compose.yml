@@ -10,7 +10,6 @@ services:
       - test_fixture
     volumes:
       - ./jenkins_home:/var/jenkins_home
-      - ./word-cloud-app:/var/word-cloud-app:ro
     stop_grace_period: 120s
   nexus:
     image: sonatype/nexus3:latest
