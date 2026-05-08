@@ -10,8 +10,17 @@ RUN \
     apt-get install -y ansible && \
     apt-get install -y sshpass && \
     apt-get install -y nodejs npm && \
+    apt-get install -y python3 python3-pip python3-venv && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Robot Framework for UI tests (in a venv to avoid PEP 668 restrictions)
+RUN python3 -m venv /opt/robot-venv && \
+    /opt/robot-venv/bin/pip install --no-cache-dir \
+        robotframework \
+        robotframework-seleniumlibrary && \
+    ln -s /opt/robot-venv/bin/robot /usr/local/bin/robot && \
+    ln -s /opt/robot-venv/bin/rebot /usr/local/bin/rebot
 
 USER jenkins
 
