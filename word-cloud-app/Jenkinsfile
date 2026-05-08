@@ -135,7 +135,16 @@ pipeline {
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'robot-results/**', allowEmptyArchive: true
+                    robot(
+                        outputPath: 'robot-results',
+                        outputFileName: 'output.xml',
+                        reportFileName: 'report.html',
+                        logFileName: 'log.html',
+                        passThreshold: 100.0,
+                        unstableThreshold: 90.0,
+                        disableArchiveOutput: false,
+                        otherFiles: '*.png'
+                    )
                 }
             }
         }
