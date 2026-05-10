@@ -10,6 +10,10 @@ services:
       - test_fixture
     volumes:
       - ./jenkins_home:/var/jenkins_home
+    environment:
+      # Relax CSP on archived artifacts so Robot Framework HTML reports
+      # (which use inline JS/CSS) render correctly via the browser.
+      JAVA_OPTS: "-Dhudson.model.DirectoryBrowserSupport.CSP="
     stop_grace_period: 120s
   nexus:
     image: sonatype/nexus3:latest
