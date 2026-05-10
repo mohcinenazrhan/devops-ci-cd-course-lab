@@ -371,4 +371,130 @@ To test the path filter:
 
 ---
 
+## Milestone: Robot Framework UI Tests (Phase 2.2)
+
+**Goal achieved:** Full pipeline now has 11 stages with three layers of test coverage:
+unit (Vitest) → API smoke (curl) → real browser UI tests (Robot + Selenium).
+
+### Architecture
+
+| Component | Role |
+|-----------|------|
+| `seleniarm/standalone-chromium` container | Selenium Grid v4 + ARM64 Chromium browser |
+| Robot Framework in Jenkins container | Test runner (CLI + SeleniumLibrary) |
+| `robot-tests/*.robot` files | 5 test cases against the deployed app |
+| `robot()` Jenkinsfile step | Plugin-based reporting with trends |
+
+### Why ARM64-Specific Selenium Image
+
+The standard `selenium/standalone-chrome` image is x86-64 only. On M-series Macs, you need
+`seleniarm/standalone-chromium` which is purpose-built for ARM64. Chrome → Chromium is the
+difference (Chrome doesn't ship for Linux ARM64).
+
+### Why Selenium Grid in a Separate Container
+
+- **Isolation**: browser crashes don't affect CI runner
+- **Scaling**: future-proofs for parallel test execution
+- **Reusable**: one grid serves multiple test suites
+- **Visual debugging**: noVNC viewer at http://localhost:7900 (password `secret`) lets you
+  watch tests run live during development
+
+### Robot Test Updates (from Go-app legacy)
+
+Original course tests targeted localhost via local Chrome:
+- `${SERVER}=localhost:8888`, no remote URL → local driver
+- `Title Should Be WordCloud` (Go app's exact title)
+- `Input Text text` (assumed `name="text"` attribute)
+
+Updated for Node.js + remote Selenium:
+- Variables overridable via env: `${SERVER}=%{ROBOT_TARGET=test_fixture:8888}`
+- `remote_url=${REMOTE URL}` to use Selenium grid
+- CSS selectors instead of name attribute (`css:textarea`, `css:.cloud-word`)
+- `Page Should Contain Word Cloud Generator` (partial match, not exact)
+
+### React-Specific Selenium Gotcha (Lesson Learned)
+
+Tried to test "empty input disables submit button":
+```robot
+Clear Element Text    css:textarea
+Element Should Be Disabled    css:button   # FAILS - button still enabled
+```
+
+**Why:** React's controlled inputs only update state via the synthetic `onChange` event.
+Selenium's `Clear Element Text` modifies the DOM directly without firing React's handlers,
+so the component's internal state still has the old value.
+
+Even `Press Keys CTRL+a+DELETE` doesn't reliably trigger React's onChange.
+
+**The correct approach** would be Execute JavaScript with the React-aware setter:
+```js
+const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+setter.call(textarea, '');
+textarea.dispatchEvent(new Event('input', { bubbles: true }));
+```
+
+But that's testing React internals, not user behavior. **Decision: dropped this test entirely.**
+Replaced with `Generated Cloud Words Are Styled` which verifies styling via attribute checks --
+more meaningful and reliable.
+
+**Lesson:** Don't try to test framework-internal behavior through Selenium. Test what users
+actually experience.
+
+### Robot Plugin + CSP Headache
+
+**Symptom:** Clicking "5/5 pass" badge → `report.html#totals` showed "Opening Robot Framework
+report failed". The HTML file's inline JavaScript wasn't executing in the browser.
+
+**What didn't work:**
+- `archiveArtifacts` step → CSP blocks inline JS
+- Setting `hudson.model.DirectoryBrowserSupport.CSP=""` system property → field is no longer
+  public in modern Jenkins; that name doesn't exist
+- Setting it via `JAVA_OPTS` in docker-compose.yml → same reason; field is stale
+
+**What worked:**
+- Installing the Robot Framework Jenkins plugin (`robot()` step) → trend graphs + dashboard
+- Browser cache clear (Cmd+Shift+R) after the plugin install made the embedded report render
+
+**Lesson:** Modern Jenkins (recent LTS versions) replaced `DirectoryBrowserSupport.CSP` with
+`jenkins.security.csp.impl.CspFilter`. Old documentation references the old field, which no
+longer exists. The Robot plugin's native dashboard at `/job/<name>/<n>/robot/` is the more
+reliable view -- it doesn't rely on the embedded `report.html`.
+
+### What the Pipeline Looks Like Now (11 stages, ~100s total)
+
+```
+1.  Declarative: Checkout SCM   ~1.5s
+2.  Checkout                    ~1s
+3.  Install                     ~17s    npm ci
+4.  Lint                        ~4s     eslint
+5.  Test                        ~12s    vitest (11 unit tests)
+6.  Build                       ~2s     vite build
+7.  Package                     ~3s     tar.gz
+8.  Upload to Nexus             ~2s     artifact 1.x
+9.  Deploy                      ~20s    Ansible to test_fixture
+10. Smoke Test                  <1s     curl /api/version
+11. Robot UI Tests              ~25s    5 browser tests via Selenium Grid
+```
+
+### Files Touched in This Milestone
+
+- `cd_jenkins/Dockerfile` -- added Python 3, Robot Framework, SeleniumLibrary in venv
+- `docker-compose.yml` -- added `selenium` service (seleniarm/standalone-chromium), JAVA_OPTS
+- `robot-tests/resources.robot` -- rewritten for React + remote Selenium grid
+- `robot-tests/version.robot` -- updated to /api/version endpoint
+- `robot-tests/wordcloud.robot` -- 4 React-aware tests (page load, generation, multi-word, styling)
+- `word-cloud-app/Jenkinsfile` -- added "Robot UI Tests" stage with `robot()` plugin step
+
+### Three Layers of Test Coverage Now
+
+| Layer | What It Catches | Speed | Failure Cost |
+|-------|----------------|-------|--------------|
+| **Unit (Vitest)** | Logic bugs, component rendering | ~13s | Cheap to fix - in CI |
+| **API Smoke (curl)** | Deploy didn't actually replace the app | <1s | Medium - app deployed wrong |
+| **UI (Robot)** | User-facing bugs: page broken, form fails, output missing | ~25s | High - users would have seen this |
+
+Each layer catches different bugs. Skipping any leaves a gap real users will eventually find.
+
+---
+
 (to be continued as we progress through the course)
